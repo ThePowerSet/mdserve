@@ -71,6 +71,30 @@
     color: var(--muted);
   }
   aside h2 .count { letter-spacing: 0; opacity: .7; }
+
+  /* The sessions pane folds away, to give the question index the room. */
+  #sessionToggle { cursor: pointer; user-select: none; align-items: center; }
+  #sessionToggle:hover { color: var(--fg); }
+  #sessionToggle .caret {
+    display: inline-block;
+    width: 9px;
+    font-size: 9px;
+    transition: transform .12s ease;
+  }
+  #sessionToggle .current {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-transform: none;
+    letter-spacing: 0;
+    font-weight: 400;
+    opacity: .8;
+  }
+  #sessionPane:not(.collapsed) #sessionToggle .current { display: none; }
+  #sessionPane.collapsed #sessionBody { display: none; }
+  #sessionPane.collapsed .caret { transform: rotate(-90deg); }
   #sessionPane { flex: none; max-height: 38vh; overflow-y: auto; }
   #turnPane {
     flex: 1;
@@ -97,6 +121,35 @@
     cursor: pointer;
   }
   .session:hover, .jump:hover { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+
+  /* A session row is a button plus its delete affordance, so the delete
+     button is a sibling: a button inside a button is not valid HTML. */
+  .row { position: relative; }
+  .row .session { padding-right: 34px; }
+  .row .del {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    padding: 2px 6px;
+    border: 1px solid transparent;
+    border-radius: 5px;
+    background: none;
+    color: var(--muted);
+    font: inherit;
+    font-size: 11px;
+    line-height: 1.4;
+    cursor: pointer;
+    opacity: 0;
+  }
+  .row:hover .del, .row .del:focus-visible { opacity: 1; }
+  .row .del:hover { color: var(--dead); background: color-mix(in srgb, var(--dead) 12%, transparent); }
+  /* Armed: one more click and it is gone, so it stops hiding itself. */
+  .row .del.confirm {
+    opacity: 1;
+    color: var(--dead);
+    border-color: var(--dead);
+    font-size: 10.5px;
+  }
   .session.active {
     background: color-mix(in srgb, var(--accent) 14%, transparent);
     border-color: color-mix(in srgb, var(--accent) 45%, transparent);
@@ -332,13 +385,20 @@
 <div id="shell">
   <aside>
     <div id="sessionPane">
-      <h2>Sessions</h2>
-      <button class="session active" id="latest">
-        <span class="name">Latest</span>
-        <span class="sub">whichever answered last</span>
-      </button>
-      <div id="list"></div>
-      <div id="empty">No sessions yet. Finish a turn in Claude Code.</div>
+      <h2 id="sessionToggle" role="button" tabindex="0" aria-expanded="true" aria-controls="sessionBody">
+        <span class="caret">&#9662;</span>
+        <span>Sessions</span>
+        <span class="count" id="sessionCount"></span>
+        <span class="current" id="currentSession"></span>
+      </h2>
+      <div id="sessionBody">
+        <button class="session active" id="latest">
+          <span class="name">Latest</span>
+          <span class="sub">whichever answered last</span>
+        </button>
+        <div id="list"></div>
+        <div id="empty">No sessions yet. Finish a turn in Claude Code.</div>
+      </div>
     </div>
 
     <div id="turnPane">
@@ -379,6 +439,10 @@ const banner = document.getElementById('banner');
 const list = document.getElementById('list');
 const empty = document.getElementById('empty');
 const latestBtn = document.getElementById('latest');
+const sessionPane = document.getElementById('sessionPane');
+const sessionToggle = document.getElementById('sessionToggle');
+const sessionCount = document.getElementById('sessionCount');
+const currentSession = document.getElementById('currentSession');
 const turnList = document.getElementById('turns');
 const turnCount = document.getElementById('turnCount');
 const noTurns = document.getElementById('noTurns');
@@ -769,13 +833,110 @@ function targetId() {
   return sessions.length ? sessions[0].id : null;
 }
 
+/* ------------------------------------------------------------------ *
+ * Collapsing the sessions pane
+ * ------------------------------------------------------------------ */
+
+const COLLAPSE_KEY = 'mdserve.sessions.collapsed';
+
+function setCollapsed(collapsed) {
+  sessionPane.classList.toggle('collapsed', collapsed);
+  sessionToggle.setAttribute('aria-expanded', String(!collapsed));
+  try {
+    localStorage.setItem(COLLAPSE_KEY, collapsed ? '1' : '0');
+  } catch {
+    // Private browsing: the pane simply forgets between reloads.
+  }
+}
+
+try {
+  setCollapsed(localStorage.getItem(COLLAPSE_KEY) === '1');
+} catch {
+  setCollapsed(false);
+}
+
+sessionToggle.onclick = () => setCollapsed(!sessionPane.classList.contains('collapsed'));
+sessionToggle.onkeydown = (e) => {
+  if (e.key === 'Enter' || e.key === ' ') {
+    e.preventDefault();
+    sessionToggle.click();
+  }
+};
+
+/* ------------------------------------------------------------------ *
+ * Deleting a session
+ * ------------------------------------------------------------------ */
+
+let disarmTimer = null;
+
+/** Put every armed delete button back to its resting state. */
+function disarmDeletes() {
+  clearTimeout(disarmTimer);
+  for (const b of list.querySelectorAll('.del.confirm')) {
+    b.classList.remove('confirm');
+    b.dataset.armed = '';
+    b.textContent = '\u00d7';
+    b.title = 'delete this rendered conversation';
+  }
+}
+
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.del')) disarmDeletes();
+});
+
+async function removeSession(id) {
+  const res = await fetch('/session?s=' + encodeURIComponent(id), { method: 'DELETE' });
+  if (!res.ok) return;
+
+  // Do not leave the page pinned to something that no longer exists.
+  if (pinned === id) {
+    pinned = null;
+    history.replaceState(null, '', location.pathname);
+  }
+  await sync(true);
+}
+
+function deleteButton(session) {
+  const del = document.createElement('button');
+  del.type = 'button';
+  del.className = 'del';
+  del.textContent = '\u00d7';
+  del.title = 'delete this rendered conversation';
+  del.setAttribute('aria-label', 'delete ' + session.title);
+
+  // Two clicks, not a modal: the first arms it, the second means it.
+  del.onclick = (e) => {
+    e.stopPropagation();
+    if (del.dataset.armed === '1') {
+      removeSession(session.id).catch(() => {});
+      return;
+    }
+    disarmDeletes();
+    del.dataset.armed = '1';
+    del.classList.add('confirm');
+    del.textContent = 'delete?';
+    del.title = 'click again to delete';
+    disarmTimer = setTimeout(disarmDeletes, 4000);
+  };
+
+  return del;
+}
+
 function drawList() {
   const active = targetId();
   empty.style.display = sessions.length ? 'none' : 'block';
   latestBtn.classList.toggle('active', !pinned);
 
+  sessionCount.textContent = sessions.length ? sessions.length : '';
+  const current = sessions.find((s) => s.id === active);
+  currentSession.textContent = current ? current.title : 'none';
+
+  disarmDeletes();
   list.innerHTML = '';
   for (const s of sessions) {
+    const row = document.createElement('div');
+    row.className = 'row';
+
     const btn = document.createElement('button');
     btn.className = 'session' + (s.id === active ? ' active' : '');
     btn.title = s.cwd || s.id;
@@ -803,7 +964,9 @@ function drawList() {
       history.replaceState(null, '', '?s=' + encodeURIComponent(s.id));
       sync(true);
     };
-    list.append(btn);
+
+    row.append(btn, deleteButton(s));
+    list.append(row);
   }
 }
 

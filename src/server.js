@@ -15,6 +15,7 @@ const fs = require('fs');
 const path = require('path');
 
 const { sessionsDir, port: defaultPort, rootDir } = require('./paths');
+const { tombstone } = require('./extract');
 
 const MAX_SESSIONS = Number(process.env.MDSERVE_MAX_SESSIONS) || 200;
 const VENDOR = path.join(rootDir(), 'vendor');
@@ -85,6 +86,60 @@ function createServer(dir) {
       return { content: clean(fs.readFileSync(file, 'utf8')), mtime: fs.statSync(file).mtimeMs };
     } catch {
       return null;
+    }
+  }
+
+  /**
+   * Forget a session: the rendered files go, and a tombstone stays behind so
+   * the next turn — or the next bulk import — does not bring it back.
+   *
+   * The transcript itself is never touched. This deletes a rendering, not a
+   * conversation: `~/.claude/projects/` remains the source of truth, and
+   * removing the tombstone by hand undoes all of this.
+   */
+  function deleteSession(id) {
+    if (!/^[A-Za-z0-9._-]+$/.test(id)) return false;
+
+    let removed = false;
+    for (const ext of ['.md', '.json']) {
+      const file = path.join(DIR, id + ext);
+      try {
+        if (!fs.existsSync(file)) continue;
+        fs.rmSync(file, { force: true });
+        removed = true;
+      } catch {
+        // Locked or already gone; the caller is told nothing was removed.
+      }
+    }
+
+    // Nothing was there to delete, so do not litter a tombstone for an id
+    // that never named a session.
+    if (!removed) return false;
+
+    try {
+      fs.writeFileSync(tombstone(DIR, id), '');
+    } catch {
+      // Without it the session may come back on the next import; say so by
+      // reporting failure rather than pretending the delete stuck.
+      return false;
+    }
+
+    seen.delete(id);
+    return removed;
+  }
+
+  /**
+   * A page on another origin cannot preflight this, but be explicit anyway:
+   * a request that announces a foreign origin does not get to delete anything.
+   */
+  function sameOrigin(req) {
+    const origin = req.headers.origin;
+    if (!origin) return true;
+    try {
+      const { hostname } = new URL(origin);
+      return hostname === 'localhost' || hostname === '127.0.0.1';
+    } catch {
+      return false;
     }
   }
 
@@ -201,6 +256,27 @@ function createServer(dir) {
       return;
     }
 
+    if (url.pathname === '/session' && req.method === 'DELETE') {
+      if (!sameOrigin(req)) {
+        res.writeHead(403, { 'Content-Type': 'text/plain' });
+        res.end('forbidden');
+        return;
+      }
+
+      const id = url.searchParams.get('s') || '';
+      if (!deleteSession(id)) {
+        res.writeHead(404, { 'Content-Type': 'text/plain' });
+        res.end('no such session');
+        return;
+      }
+
+      // Every other open tab should lose it too.
+      onChange();
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ deleted: id }));
+      return;
+    }
+
     if (url.pathname === '/events') {
       res.writeHead(200, {
         'Content-Type': 'text/event-stream',
@@ -228,7 +304,7 @@ function createServer(dir) {
     res.end('not found');
   });
 
-  return { server, listSessions, readSession, scan, onChange, watchDir: () => DIR };
+  return { server, listSessions, readSession, deleteSession, scan, onChange, watchDir: () => DIR };
 }
 
 /** Boot the watcher and listen. Used by the CLI; exported for tests. */

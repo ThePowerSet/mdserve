@@ -11,7 +11,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
-const { extract, OK, FAILED, BAD_INPUT, UNCHANGED } = require('../src/extract');
+const { extract, OK, FAILED, BAD_INPUT, UNCHANGED, DELETED } = require('../src/extract');
 
 const FIXTURES = path.join(__dirname, 'fixtures');
 const fixture = (name) => path.join(FIXTURES, name);
@@ -152,4 +152,21 @@ test('rejects input that is not a readable transcript', () => {
   assert.equal(extract('/nonexistent/nope.jsonl', { dir: tmpdir() }).code, BAD_INPUT);
   assert.equal(extract('', { dir: tmpdir() }).code, BAD_INPUT);
   assert.equal(extract(FIXTURES, { dir: tmpdir() }).code, BAD_INPUT, 'a directory is not a transcript');
+});
+
+test('a session deleted from the viewer is not resurrected', () => {
+  const dir = tmpdir();
+
+  assert.equal(extract(fixture('conversation.jsonl'), { dir }).code, OK);
+  fs.rmSync(path.join(dir, 'conversation.md'));
+  fs.writeFileSync(path.join(dir, 'conversation.deleted'), '');
+
+  // Neither the next turn nor a bulk import brings it back...
+  assert.equal(extract(fixture('conversation.jsonl'), { dir }).code, DELETED);
+  assert.equal(fs.existsSync(path.join(dir, 'conversation.md')), false);
+
+  // ...until the tombstone is removed by hand.
+  fs.rmSync(path.join(dir, 'conversation.deleted'));
+  assert.equal(extract(fixture('conversation.jsonl'), { dir }).code, OK);
+  assert.ok(fs.existsSync(path.join(dir, 'conversation.md')));
 });

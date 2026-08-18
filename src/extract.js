@@ -20,6 +20,7 @@ const OK = 0;
 const FAILED = 1;      // nothing usable in the transcript (or it is still settling)
 const BAD_INPUT = 2;   // missing file, or an id that is not a single path segment
 const UNCHANGED = 3;   // rebuilt conversation is identical to the file on disk
+const DELETED = 4;     // the reader deleted this session and does not want it back
 
 /* ------------------------------------------------------------------ *
  * Transcript -> turns
@@ -150,6 +151,11 @@ function sidecarTitle({ title, prompt, cwd }) {
  * Entry point
  * ------------------------------------------------------------------ */
 
+/** Deleting a session from the viewer leaves this behind, so that the next
+ *  turn — or the next bulk import — does not quietly resurrect it. Remove the
+ *  file by hand to bring the conversation back. */
+const tombstone = (dir, session) => path.join(dir, session + '.deleted');
+
 /**
  * @param {string} transcript  path to <session>.jsonl
  * @param {{dir?: string, requireChange?: boolean}} [opts]
@@ -167,6 +173,8 @@ function extract(transcript, opts = {}) {
   // single path segment: it becomes a filename and, later, a URL parameter.
   const session = path.basename(transcript, '.jsonl');
   if (!/^[A-Za-z0-9._-]+$/.test(session)) return { code: BAD_INPUT };
+
+  if (fs.existsSync(tombstone(dir, session))) return { code: DELETED, session };
 
   let raw;
   try {
@@ -218,4 +226,4 @@ function extract(transcript, opts = {}) {
   return { code: OK, session };
 }
 
-module.exports = { extract, OK, FAILED, BAD_INPUT, UNCHANGED, stripNoise, buildConversation, parseTranscript };
+module.exports = { extract, tombstone, OK, FAILED, BAD_INPUT, UNCHANGED, DELETED, stripNoise, buildConversation, parseTranscript };

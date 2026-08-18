@@ -16,7 +16,7 @@ const net = require('net');
 const path = require('path');
 const { spawn } = require('child_process');
 
-const { extract, OK } = require('./extract');
+const { extract, OK, DELETED } = require('./extract');
 const { newestTranscript } = require('./transcripts');
 const { sessionsDir, port: defaultPort, logFile, stateDir, rootDir } = require('./paths');
 
@@ -91,7 +91,8 @@ async function run() {
     } catch {
       break;
     }
-    if (code === OK) break;
+    // A session the reader deleted stays deleted: nothing to wait for.
+    if (code === OK || code === DELETED) break;
     await sleep(INTERVAL_MS);
   }
 

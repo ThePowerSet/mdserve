@@ -103,6 +103,12 @@ Serves whatever has already been rendered. No hook, no service, no live updates.
   most recently. Click a session to pin it; the choice lands in the URL as
   `?s=<id>` and survives a reload — which is how you keep two Claude Code
   sessions open on two monitors.
+- **Fold the session menu away** by clicking its `Sessions` header. Collapsed, it
+  shows just the session you are reading and hands the rest of the sidebar to
+  the question index. The choice is remembered between visits.
+- **Delete a session** with the `×` that appears when you hover over its row.
+  One click arms it, a second confirms — no dialog. See below for what that
+  does and does not remove.
 - **Question index**, below it: one line per prompt, clickable.
 - **Keyboard**: `j` next question, `k` previous, `g` top, `G` bottom.
 - **Follow** switches itself off the moment you jump to a question, so you are
@@ -144,6 +150,7 @@ rebuilt conversation was identical to what was already on disk.
 |---|---|
 | `~/.mdserve/sessions/<id>.md` | The rendered conversation. One per session. |
 | `~/.mdserve/sessions/<id>.json` | Title, working directory, turn count — for the menu. |
+| `~/.mdserve/sessions/<id>.deleted` | Tombstone: this session was deleted and must not come back. |
 | `~/.mdserve/mdserve.log` | Server log. Deliberately not in `/tmp`, which reboots wipe. |
 | `~/.claude/projects/<project>/<uuid>.jsonl` | The transcripts. **Read-only, for us.** |
 | `~/.claude/settings.json` | Where the `Stop` hook is registered (manual install). |
@@ -178,6 +185,28 @@ server or the browser keeps getting the old page. `src/extract.js` runs afresh
 every turn, so changes there are live immediately.
 
 ---
+
+## Deleting a session
+
+Deleting from the page removes the **rendering**, not the conversation. The
+transcript in `~/.claude/projects/` is never touched — mdserve has no code path
+that writes there at all.
+
+Because the renderer rebuilds from the transcript, a plain delete would undo
+itself at the next turn, or at the next `mdserve import all`. So a delete leaves
+an empty `<id>.deleted` file behind, and both the hook and the importer skip any
+session that has one.
+
+To bring a deleted conversation back:
+
+```sh
+rm ~/.mdserve/sessions/<id>.deleted
+mdserve import all
+```
+
+Deleting is only offered over `DELETE /session?s=<id>`, from the loopback
+interface, and requests announcing a foreign origin are refused — a page in
+another tab cannot quietly delete your conversations.
 
 ## The `.md` format
 

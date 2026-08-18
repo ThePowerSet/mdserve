@@ -9,7 +9,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const { extract, OK } = require('./extract');
+const { extract, OK, DELETED } = require('./extract');
 const { listTranscripts } = require('./transcripts');
 const { sessionsDir } = require('./paths');
 
@@ -26,8 +26,13 @@ function runImport(want = 30, { dir = sessionsDir(), log = console.log } = {}) {
   const files = want === 'all' ? all : all.slice(0, want);
 
   let imported = 0;
+  let skipped = 0;
   for (const file of files) {
     const { code, session } = extract(file, { dir });
+    if (code === DELETED) {
+      skipped++;
+      continue;
+    }
     if (code !== OK) continue;
 
     let meta = {};
@@ -42,7 +47,8 @@ function runImport(want = 30, { dir = sessionsDir(), log = console.log } = {}) {
 
   log('');
   log(`imported ${imported} of ${files.length} transcripts into ${dir}`);
-  return { imported, total: files.length };
+  if (skipped) log(`${skipped} left out: deleted from the viewer`);
+  return { imported, skipped, total: files.length };
 }
 
 module.exports = { runImport };

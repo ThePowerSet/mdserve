@@ -87,3 +87,54 @@ test('strips terminal escapes and carriage-return rewrites', () => {
   assert.equal(clean('\x1B[31mred\x1B[0m'), 'red');
   assert.equal(clean('progress 10%\rprogress 100%'), 'progress 100%');
 });
+
+test('deletes a session, and leaves a tombstone so it stays deleted', async () => {
+  await withServer(async (base, dir) => {
+    const res = await fetch(`${base}/session?s=abc123`, { method: 'DELETE' });
+    assert.equal(res.status, 200);
+    assert.deepEqual(await res.json(), { deleted: 'abc123' });
+
+    assert.equal(fs.existsSync(path.join(dir, 'abc123.md')), false);
+    assert.equal(fs.existsSync(path.join(dir, 'abc123.json')), false);
+    assert.ok(fs.existsSync(path.join(dir, 'abc123.deleted')), 'tombstone written');
+
+    assert.deepEqual(await (await fetch(`${base}/api/sessions`)).json(), []);
+  });
+});
+
+test('the transcript is never what gets deleted', async () => {
+  await withServer(async (base, dir) => {
+    // Only rendered files live here; nothing in this handler can reach
+    // ~/.claude/projects, and the tombstone is all that is left behind.
+    await fetch(`${base}/session?s=abc123`, { method: 'DELETE' });
+    assert.deepEqual(fs.readdirSync(dir).sort(), ['abc123.deleted']);
+  });
+});
+
+test('refuses to delete what it cannot name safely', async () => {
+  await withServer(async (base) => {
+    for (const id of ['', '..%2F..%2Fetc%2Fpasswd', 'a%2Fb']) {
+      const res = await fetch(`${base}/session?s=${id}`, { method: 'DELETE' });
+      assert.equal(res.status, 404, `${id || '(empty)'} must not delete anything`);
+    }
+    assert.equal((await fetch(`${base}/session?s=nosuch`, { method: 'DELETE' })).status, 404);
+  });
+});
+
+test('a foreign origin cannot delete anything', async () => {
+  await withServer(async (base, dir) => {
+    const res = await fetch(`${base}/session?s=abc123`, {
+      method: 'DELETE',
+      headers: { Origin: 'https://evil.example' },
+    });
+    assert.equal(res.status, 403);
+    assert.ok(fs.existsSync(path.join(dir, 'abc123.md')), 'the session survives');
+  });
+});
+
+test('only DELETE deletes', async () => {
+  await withServer(async (base, dir) => {
+    assert.equal((await fetch(`${base}/session?s=abc123`)).status, 404);
+    assert.ok(fs.existsSync(path.join(dir, 'abc123.md')));
+  });
+});
