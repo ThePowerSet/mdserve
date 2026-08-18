@@ -72,10 +72,10 @@
   }
   aside h2 .count { letter-spacing: 0; opacity: .7; }
 
-  /* The sessions pane folds away, to give the question index the room. */
-  #sessionToggle { cursor: pointer; user-select: none; align-items: center; }
-  #sessionToggle:hover { color: var(--fg); }
-  #sessionToggle .caret {
+  /* Either pane folds away, and the whole sidebar with them. */
+  .fold { cursor: pointer; user-select: none; align-items: center; }
+  .fold:hover { color: var(--fg); }
+  .fold .caret {
     display: inline-block;
     width: 9px;
     font-size: 9px;
@@ -93,8 +93,15 @@
     opacity: .8;
   }
   #sessionPane:not(.collapsed) #sessionToggle .current { display: none; }
-  #sessionPane.collapsed #sessionBody { display: none; }
-  #sessionPane.collapsed .caret { transform: rotate(-90deg); }
+  .collapsed > .fold .caret { transform: rotate(-90deg); }
+  #sessionPane.collapsed #sessionBody,
+  #turnPane.collapsed #turnBody { display: none; }
+  /* Folded, the questions pane must stop claiming the leftover height. */
+  #turnPane.collapsed { flex: none; }
+
+  /* Hiding the sidebar outright, leaving the conversation the whole window. */
+  #shell.no-sidebar aside { display: none; }
+  #sidebarToggle { flex: none; padding: 3px 7px; font-size: 13px; line-height: 1.2; }
   #sessionPane { flex: none; max-height: 38vh; overflow-y: auto; }
   #turnPane {
     flex: 1;
@@ -105,6 +112,7 @@
     padding-top: 8px;
     border-top: 1px solid var(--border);
   }
+  #turnBody { flex: 1; min-height: 0; display: flex; flex-direction: column; }
   #turns { overflow-y: auto; padding-bottom: 12px; }
 
   .session, .jump {
@@ -385,7 +393,7 @@
 <div id="shell">
   <aside>
     <div id="sessionPane">
-      <h2 id="sessionToggle" role="button" tabindex="0" aria-expanded="true" aria-controls="sessionBody">
+      <h2 id="sessionToggle" class="fold" role="button" tabindex="0" aria-expanded="true" aria-controls="sessionBody">
         <span class="caret">&#9662;</span>
         <span>Sessions</span>
         <span class="count" id="sessionCount"></span>
@@ -402,14 +410,21 @@
     </div>
 
     <div id="turnPane">
-      <h2>Questions <span class="count" id="turnCount"></span></h2>
-      <div id="turns"></div>
-      <div id="noTurns">This session has no prompts yet.</div>
+      <h2 id="turnToggle" class="fold" role="button" tabindex="0" aria-expanded="true" aria-controls="turnBody">
+        <span class="caret">&#9662;</span>
+        <span>Questions</span>
+        <span class="count" id="turnCount"></span>
+      </h2>
+      <div id="turnBody">
+        <div id="turns"></div>
+        <div id="noTurns">This session has no prompts yet.</div>
+      </div>
     </div>
   </aside>
 
   <div id="pane">
     <header>
+      <button id="sidebarToggle" title="show or hide the sidebar (s)" aria-label="toggle sidebar">&#9776;</button>
       <span id="dot" title="connection"></span>
       <span id="where">—</span>
       <span class="spacer"></span>
@@ -439,8 +454,12 @@ const banner = document.getElementById('banner');
 const list = document.getElementById('list');
 const empty = document.getElementById('empty');
 const latestBtn = document.getElementById('latest');
+const shell = document.getElementById('shell');
 const sessionPane = document.getElementById('sessionPane');
 const sessionToggle = document.getElementById('sessionToggle');
+const turnPane = document.getElementById('turnPane');
+const turnToggle = document.getElementById('turnToggle');
+const sidebarToggle = document.getElementById('sidebarToggle');
 const sessionCount = document.getElementById('sessionCount');
 const currentSession = document.getElementById('currentSession');
 const turnList = document.getElementById('turns');
@@ -794,6 +813,7 @@ document.addEventListener('keydown', (e) => {
   else if (e.key === 'k') { goTo(current - 1); e.preventDefault(); }
   else if (e.key === 'g') { goTo(0); e.preventDefault(); }
   else if (e.key === 'G') { endBtn.onclick(); e.preventDefault(); }
+  else if (e.key === 's') { sidebarToggle.click(); e.preventDefault(); }
 });
 
 let ticking = false;
@@ -834,34 +854,62 @@ function targetId() {
 }
 
 /* ------------------------------------------------------------------ *
- * Collapsing the sessions pane
+ * Folding things away
+ *
+ * Both sidebar panes fold, and the sidebar itself can go entirely, leaving
+ * the conversation the whole window. Each choice is remembered.
  * ------------------------------------------------------------------ */
 
-const COLLAPSE_KEY = 'mdserve.sessions.collapsed';
-
-function setCollapsed(collapsed) {
-  sessionPane.classList.toggle('collapsed', collapsed);
-  sessionToggle.setAttribute('aria-expanded', String(!collapsed));
+/** localStorage is unavailable in some privacy modes; never let it throw. */
+function recall(key, fallback) {
   try {
-    localStorage.setItem(COLLAPSE_KEY, collapsed ? '1' : '0');
+    const value = localStorage.getItem(key);
+    return value === null ? fallback : value === '1';
   } catch {
-    // Private browsing: the pane simply forgets between reloads.
+    return fallback;
   }
 }
 
-try {
-  setCollapsed(localStorage.getItem(COLLAPSE_KEY) === '1');
-} catch {
-  setCollapsed(false);
+function remember(key, value) {
+  try {
+    localStorage.setItem(key, value ? '1' : '0');
+  } catch {
+    // Then it simply forgets between visits.
+  }
 }
 
-sessionToggle.onclick = () => setCollapsed(!sessionPane.classList.contains('collapsed'));
-sessionToggle.onkeydown = (e) => {
-  if (e.key === 'Enter' || e.key === ' ') {
-    e.preventDefault();
-    sessionToggle.click();
-  }
-};
+/** Wire a pane header so clicking it folds the pane away. */
+function makeFoldable(pane, toggle, key) {
+  const apply = (collapsed) => {
+    pane.classList.toggle('collapsed', collapsed);
+    toggle.setAttribute('aria-expanded', String(!collapsed));
+    remember(key, collapsed);
+  };
+
+  apply(recall(key, false));
+
+  toggle.onclick = () => apply(!pane.classList.contains('collapsed'));
+  toggle.onkeydown = (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      toggle.click();
+    }
+  };
+}
+
+makeFoldable(sessionPane, sessionToggle, 'mdserve.sessions.collapsed');
+makeFoldable(turnPane, turnToggle, 'mdserve.questions.collapsed');
+
+const SIDEBAR_KEY = 'mdserve.sidebar.hidden';
+
+function setSidebar(hidden) {
+  shell.classList.toggle('no-sidebar', hidden);
+  sidebarToggle.setAttribute('aria-pressed', String(hidden));
+  remember(SIDEBAR_KEY, hidden);
+}
+
+setSidebar(recall(SIDEBAR_KEY, false));
+sidebarToggle.onclick = () => setSidebar(!shell.classList.contains('no-sidebar'));
 
 /* ------------------------------------------------------------------ *
  * Deleting a session

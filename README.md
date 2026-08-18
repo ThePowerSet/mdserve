@@ -103,14 +103,17 @@ Serves whatever has already been rendered. No hook, no service, no live updates.
   most recently. Click a session to pin it; the choice lands in the URL as
   `?s=<id>` and survives a reload — which is how you keep two Claude Code
   sessions open on two monitors.
-- **Fold the session menu away** by clicking its `Sessions` header. Collapsed, it
-  shows just the session you are reading and hands the rest of the sidebar to
-  the question index. The choice is remembered between visits.
+- **Fold either pane away** by clicking its `Sessions` or `Questions` header.
+  Folded, the session pane still shows which conversation you are reading.
+- **Hide the sidebar entirely** with the `☰` button, top left, or by pressing
+  `s` — the conversation then gets the whole window. All three choices are
+  remembered between visits.
 - **Delete a session** with the `×` that appears when you hover over its row.
   One click arms it, a second confirms — no dialog. See below for what that
   does and does not remove.
 - **Question index**, below it: one line per prompt, clickable.
-- **Keyboard**: `j` next question, `k` previous, `g` top, `G` bottom.
+- **Keyboard**: `j` next question, `k` previous, `g` top, `G` bottom, `s` show
+  or hide the sidebar.
 - **Follow** switches itself off the moment you jump to a question, so you are
   not yanked to the bottom while reading back. The `latest` button re-arms it.
 - **The dot, top left**: green means connected to the server, red means not.
@@ -175,6 +178,7 @@ Everything is an environment variable; there is no config file.
 | Change colours, fonts, theme | `src/viewer.html` | the `:root` block at the top |
 | Change sidebar width | `src/viewer.html` | `--sidebar` in `:root` |
 | Change keyboard shortcuts | `src/viewer.html` | search for `keydown` |
+| Change what folds, or its remembered state | `src/viewer.html` | `makeFoldable`, `setSidebar` |
 | Change how far long prompts fold | `src/viewer.html` | search for the fold threshold |
 | Strip more noise from prompts | `src/extract.js` | `stripNoise` |
 | Include sub-agent conversations | `src/extract.js` | the `isSidechain` filter in `buildConversation` |
@@ -313,11 +317,13 @@ place. Delete them yourself if you want them gone.
 ## Development
 
 ```sh
-node --test      # 18 tests, no dependencies
+node --test      # 29 tests, no dependencies
 ```
 
 The tests pin the extractor's rules — turn folding, noise stripping, sub-agent
-exclusion, idempotence, marker forgery — and what the server refuses to serve.
+exclusion, idempotence, marker forgery — what the server refuses to serve, and
+the joins inside `viewer.html`, where a renamed id would otherwise fail silently
+in the browser and nowhere else.
 The fixtures in `test/fixtures/` are synthetic; no real conversation is in this
 repo.
 
