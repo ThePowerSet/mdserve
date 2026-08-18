@@ -14,6 +14,7 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 
 const { home, logFile, stateDir, rootDir, port: defaultPort } = require('./paths');
+const { stableNodePath } = require('./node-path');
 
 /** Fork this and you should change it to a domain you actually control. */
 const LABEL = 'io.github.mdserve';
@@ -33,7 +34,7 @@ function plist(root, port) {
   const log = logFile();
   // Give launchd node's own directory: a login agent does not inherit the
   // interactive shell's PATH, which is how these installs usually break.
-  const PATH = `${path.dirname(process.execPath)}:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin`;
+  const PATH = `${path.dirname(stableNodePath())}:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin`;
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -43,7 +44,7 @@ function plist(root, port) {
 
   <key>ProgramArguments</key>
   <array>
-    <string>${escapeXml(process.execPath)}</string>
+    <string>${escapeXml(stableNodePath())}</string>
     <string>${escapeXml(path.join(root, 'bin', 'mdserve.js'))}</string>
     <string>serve</string>
   </array>
@@ -88,7 +89,7 @@ After=default.target
 Type=simple
 WorkingDirectory=${root}
 Environment=MDSERVE_PORT=${port}
-ExecStart=${process.execPath} ${path.join(root, 'bin', 'mdserve.js')} serve
+ExecStart=${stableNodePath()} ${path.join(root, 'bin', 'mdserve.js')} serve
 Restart=always
 RestartSec=10
 

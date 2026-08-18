@@ -12,13 +12,14 @@ const fs = require('fs');
 const path = require('path');
 
 const { settingsFile, rootDir } = require('./paths');
+const { stableNodePath } = require('./node-path');
 
 /** The substring that identifies a hook entry as installed by this repo. */
 const MARKER = path.join('bin', 'mdserve.js');
 
 /** Absolute paths, and the interpreter we are running under: no PATH guessing. */
 function hookCommand(root = rootDir()) {
-  return `"${process.execPath}" "${path.join(root, 'bin', 'mdserve.js')}" hook`;
+  return `"${stableNodePath()}" "${path.join(root, 'bin', 'mdserve.js')}" hook`;
 }
 
 function isOurs(entry) {
