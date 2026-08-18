@@ -1,0 +1,3 @@
+{"type":"user","timestamp":"2026-01-01T12:00:00.000Z","cwd":"/home/example/work/demo","message":{"content":"First question."}}
+{"type":"assistant","timestamp":"2026-01-01T12:00:01.000Z","cwd":"/home/example/work/demo","message":{"content":[{"type":"text","text":"First answer."}]}}
+{"type":"assistant","timestamp":"2026-01-01T12:00:02.000Z","message":{"content":[{"type":"te

@@ -1,0 +1,7 @@
+{
+  "name": "mdserve",
+  "version": "1.0.0",
+  "description": "Read your Claude Code conversations in a browser: live-updating, indexed by question, with LaTeX and syntax highlighting.",
+  "homepage": "https://github.com/ThePowerSet/mdserve",
+  "license": "MIT"
+}

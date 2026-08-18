@@ -1,0 +1,18 @@
+{
+  "name": "mdserve",
+  "version": "1.0.0",
+  "description": "Read your Claude Code conversations in a browser: live-updating, searchable by question, with LaTeX and syntax highlighting.",
+  "keywords": ["claude-code", "transcript", "viewer", "markdown", "livereload"],
+  "license": "MIT",
+  "bin": { "mdserve": "bin/mdserve.js" },
+  "main": "src/server.js",
+  "files": ["bin", "src", "vendor", "hooks", ".claude-plugin", "README.md", "LICENSE"],
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "start": "node bin/mdserve.js serve",
+    "test": "node --test"
+  },
+  "dependencies": {},
+  "repository": { "type": "git", "url": "https://github.com/ThePowerSet/mdserve.git" },
+  "homepage": "https://github.com/ThePowerSet/mdserve#readme"
+}

@@ -1,0 +1,2 @@
+{"type":"user","timestamp":"2026-01-01T11:00:00.000Z","cwd":"/home/example/work/demo","message":{"content":[{"type":"tool_result","tool_use_id":"t9","content":"x"}]}}
+{"type":"assistant","timestamp":"2026-01-01T11:00:01.000Z","cwd":"/home/example/work/demo","message":{"content":[{"type":"tool_use","id":"t9","name":"Bash","input":{}}]}}

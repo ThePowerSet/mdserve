@@ -1,0 +1,11 @@
+{
+  "name": "mdserve",
+  "owner": { "name": "ThePowerSet" },
+  "plugins": [
+    {
+      "name": "mdserve",
+      "source": "./",
+      "description": "Read your Claude Code conversations in a browser."
+    }
+  ]
+}
